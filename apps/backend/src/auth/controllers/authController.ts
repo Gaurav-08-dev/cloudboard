@@ -5,101 +5,129 @@ import jwt from "jsonwebtoken";
 import Session from "../../models/session";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
 
-export const register = asyncHandler(
-    async (req, res) => {
-        const { email, password } = req.body;
+export const register = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
 
-        const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email });
 
-        if (existingUser) {
-            res.status(400).json({
-                message: "User already exists"
-            })
-            return
-        }
+  if (existingUser) {
+    res.status(400).json({
+      message: "User already exists",
+    });
+    return;
+  }
 
-        const hashedPassword =
-            await bcrypt.hash(password, 10)
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = await User.create({
-            email,
-            password: hashedPassword
-        })
+  const user = await User.create({
+    email,
+    password: hashedPassword,
+  });
 
-        res.status(201).json({
-            message: "User created"
-        })
-    })
+  res.status(201).json({
+    message: "User created",
+  });
+});
 
-export const login = asyncHandler(
-    async (req, res) => {
+export const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
 
-        const { email, password } = req.body
+  const user = await User.findOne({ email });
 
-        const user = await User.findOne({ email })
+  if (!user) {
+    res.status(401).json({
+      message: "Invalid credentials",
+    });
+    return;
+  }
 
-        if (!user) {
-            res.status(401).json({
-                message:
-                    "Invalid credentials"
-            })
-            return;
-        }
+  const isMatch = await bcrypt.compare(password, user.password);
 
-        const isMatch = await bcrypt.compare(
-            password,
-            user.password
-        )
+  if (!isMatch) {
+    res.status(401).json({
+      message: "Invalid credentials",
+    });
+    return;
+  }
 
-        if (!isMatch) {
-            res.status(401).json({
-                message:
-                    "Invalid credentials"
-            })
-            return
-        }
+  const accessToken = generateAccessToken(user._id.toString());
 
-        const accessToken =
-            generateAccessToken(
-                user._id.toString()
-            )
+  const refreshToken = generateRefreshToken(user._id.toString());
 
-        const refreshToken =
-            generateRefreshToken(
-                user._id.toString()
-            )
+  await Session.create({
+    userId: user._id,
+    refreshToken,
+    userAgent: req.headers["user-agent"] || "",
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  });
 
-        await Session.create({
-            userId: user._id,
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
 
-            refreshToken,
+  res.json({
+    accessToken,
+  });
+});
 
-            userAgent:
-                req.headers["user-agent"] || "",
+export const refresh = asyncHandler(async (req, res) => {
+  const token = req.cookies.refreshToken;
 
-            expiresAt:
-                new Date(
-                    Date.now() +
-                    7 * 24 * 60 * 60 * 1000
-                )
-        })
+  if (!token) {
+    res.sendStatus(401);
+    return;          // return void, not the Response
+  }
 
-        res.cookie(
-            "refreshToken",
-            refreshToken,
-            {
-                httpOnly: true,
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as jwt.JwtPayload;
 
-                secure:
-                    process.env.NODE_ENV ===
-                    "production",
+    const session = await Session.findOne({ refreshToken: token });
 
-                sameSite: "lax"
-            }
-        )
+    if (!session) {
+      res.sendStatus(403);
+      return;
+    }
 
-        res.json({
-            accessToken
-        })
-    })
+    await Session.deleteOne({ refreshToken: token });
 
+    const newRefreshToken = generateRefreshToken(decoded.userId);
+
+    await Session.create({
+      userId: decoded.userId,
+      refreshToken: newRefreshToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const accessToken = generateAccessToken(decoded.userId);
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+
+    res.json({ accessToken });
+
+  } catch {
+    res.sendStatus(403);
+  }
+});
+
+export const logout =
+asyncHandler(
+async (req, res) => {
+
+  const token = req.cookies.refreshToken
+
+  await Session.deleteOne({
+    refreshToken: token
+  })
+
+  res.clearCookie("refreshToken")
+
+  res.json({
+    message: "Logged out"
+  })
+})
