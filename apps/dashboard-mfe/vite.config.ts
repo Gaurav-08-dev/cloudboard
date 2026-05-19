@@ -10,6 +10,9 @@ export default defineConfig({
     exposes: {
       "./Dashboard": "./src/App"
     },
-    shared: ["react", "react-dom"]
+    shared: ["react", "react-dom"],
   })],
+  server: {
+    port: 3002,
+  },
 })

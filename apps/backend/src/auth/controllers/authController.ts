@@ -77,11 +77,14 @@ export const refresh = asyncHandler(async (req, res) => {
 
   if (!token) {
     res.sendStatus(401);
-    return;          // return void, not the Response
+    return; // return void, not the Response
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as jwt.JwtPayload;
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_REFRESH_SECRET!,
+    ) as jwt.JwtPayload;
 
     const session = await Session.findOne({ refreshToken: token });
 
@@ -109,25 +112,21 @@ export const refresh = asyncHandler(async (req, res) => {
     });
 
     res.json({ accessToken });
-
   } catch {
     res.sendStatus(403);
   }
 });
 
-export const logout =
-asyncHandler(
-async (req, res) => {
-
-  const token = req.cookies.refreshToken
+export const logout = asyncHandler(async (req, res) => {
+  const token = req.cookies.refreshToken;
 
   await Session.deleteOne({
-    refreshToken: token
-  })
+    refreshToken: token,
+  });
 
-  res.clearCookie("refreshToken")
+  res.clearCookie("refreshToken");
 
   res.json({
-    message: "Logged out"
-  })
-})
+    message: "Logged out",
+  });
+});

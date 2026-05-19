@@ -7,6 +7,9 @@ export default defineConfig({
     remotes: {
       dashboard: "http://localhost:3002/assets/remoteEntry.js"
     },
-    shared: ["react", "react-dom"]
+    shared: ["react", "react-dom"],
   })],
+  server: {
+    port: 3000,
+  }
 })
