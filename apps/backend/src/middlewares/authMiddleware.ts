@@ -26,7 +26,6 @@ export const protect = (
 
         //@ts-ignore
         req.user = decoded;
-
         next()
 
     } catch {
